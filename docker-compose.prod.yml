@@ -1,0 +1,12 @@
+# Use on your Docker host after CI publishes to GHCR.
+# Replace OWNER/REPO with your GitHub org/repo (lowercase).
+services:
+  webhook:
+    image: ghcr.io/OWNER/REPO:latest
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
