@@ -4,7 +4,7 @@ Receives Datto RMM monitor webhooks when software is detected or cleared, and ru
 
 ### Overlap prevention
 
-Before starting another quick job, the service checks the last job for that device via `GET /v2/job/{jobUid}/results/{deviceUid}`. A new quick job is **not** created while `jobDeploymentStatus` is `null`, `Pending`, or `Running`. The scheduler keeps running and re-checks about every 60 seconds; `last_run_at` is not advanced while waiting, so the device stays eligible until the prior job finishes.
+Before starting another quick job (only when the device is due per `QUICKJOB_INTERVAL_MINUTES`), the service checks the last job via `GET /v2/job/{jobUid}/results/{deviceUid}`. A new quick job is **not** created while `jobDeploymentStatus` is `null`, `Pending`, or `Running`. If skipped for that reason, the interval timer is reset and the status is checked again on the next scheduled run—not on every 60-second scheduler tick.
 
 ---
 

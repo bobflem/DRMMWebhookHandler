@@ -67,6 +67,8 @@ async def run_quickjob_for_device(app: FastAPI, device: ActiveDevice) -> bool:
 
     try:
         if await _should_skip_due_to_active_job(datto, device):
+            # Advance interval so status is only re-checked on the next scheduled run, not every tick.
+            store.set_last_run(device.device_uid)
             return False
 
         result = await datto.create_quick_job(device.device_uid)
