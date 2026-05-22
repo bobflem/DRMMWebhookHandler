@@ -2,6 +2,10 @@
 
 Receives Datto RMM monitor webhooks when software is detected or cleared, and runs a configured Datto RMM quick job on affected devices every 15 minutes while detection is active. State is stored in SQLite so scheduling resumes after container restarts.
 
+### Overlap prevention
+
+Before starting another quick job, the service checks the last job for that device via `GET /v2/job/{jobUid}/results/{deviceUid}`. A new quick job is **not** created while `jobDeploymentStatus` is `null`, `Pending`, or `Running`. The scheduler keeps running and re-checks about every 60 seconds; `last_run_at` is not advanced while waiting, so the device stays eligible until the prior job finishes.
+
 ---
 
 ## Workflow: Docker host

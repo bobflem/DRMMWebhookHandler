@@ -5,7 +5,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 
 from app.config import Settings
 from app.datto_client import DattoApiError, DattoClient
-from app.scheduler import run_quickjob_for_device
+from app.scheduler import run_quickjob_for_device_uid
 from app.store import DeviceStore
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ async def datto_webhook(
         store.upsert_detected(device_uid, hostname)
         logger.info("Software detected on %s (%s)", device_uid, hostname or "unknown")
         if settings.run_on_detect:
-            await run_quickjob_for_device(request.app, device_uid)
+            await run_quickjob_for_device_uid(request.app, device_uid)
         return {"status": "ok", "action": "tracking"}
 
     removed = store.remove(device_uid)

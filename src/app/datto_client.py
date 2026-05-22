@@ -9,6 +9,14 @@ from app.config import Settings
 
 logger = logging.getLogger(__name__)
 
+BLOCKING_DEPLOYMENT_STATUSES = frozenset({None, "Pending", "Running"})
+
+
+def is_job_still_active_on_device(results: dict[str, Any]) -> bool:
+    if "jobDeploymentStatus" not in results:
+        return True
+    return results.get("jobDeploymentStatus") in BLOCKING_DEPLOYMENT_STATUSES
+
 
 class DattoApiError(Exception):
     def __init__(self, message: str, status_code: int | None = None) -> None:
@@ -80,6 +88,36 @@ class DattoClient:
                 f"Get device failed: {response.status_code} {response.text[:200]}",
                 response.status_code,
             )
+        return response.json()
+
+    async def get_job_results(
+        self,
+        job_uid: str,
+        device_uid: str,
+        *,
+        retry_auth: bool = True,
+    ) -> dict[str, Any]:
+        token = await self.ensure_token()
+        url = f"{self._api_root}/v2/job/{job_uid}/results/{device_uid}"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+
+        if response.status_code == 401 and retry_auth:
+            await self._refresh_token()
+            return await self.get_job_results(job_uid, device_uid, retry_auth=False)
+
+        if response.status_code == 404:
+            raise DattoApiError(f"Job results not found for job {job_uid} device {device_uid}", 404)
+
+        if response.status_code == 429:
+            raise DattoApiError("Rate limited (429)", 429)
+
+        if response.status_code != 200:
+            raise DattoApiError(
+                f"Get job results failed: {response.status_code} {response.text[:200]}",
+                response.status_code,
+            )
+
         return response.json()
 
     async def create_quick_job(self, device_uid: str, *, retry_auth: bool = True) -> dict[str, Any]:
