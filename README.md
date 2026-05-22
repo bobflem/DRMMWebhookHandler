@@ -131,6 +131,14 @@ SQLite at `DATA_DIR/active_devices.db` with `device_detections` and `device_sche
 
 ## Docker image (GHCR)
 
-Published on push to `main` or tags `v*`. Image: `ghcr.io/<owner>/<repo>:latest`.
+Published on push to `main`, `dev`, or version tags `v*`.
+
+| Branch / tag | Image tags |
+|--------------|------------|
+| `main` | `latest`, `main`, `sha-<commit>` |
+| `dev` | `dev`, `sha-<commit>` (no `latest`) |
+| `v1.2.3` | `1.2.3`, `1.2`, `1`, `sha-<commit>` |
+
+Example: `ghcr.io/<owner>/<repo>:dev` for the dev branch.
 
 For production compose, mount `config/profiles.yaml` the same way as in [`docker-compose.yml`](docker-compose.yml).
