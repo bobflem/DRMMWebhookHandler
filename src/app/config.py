@@ -10,11 +10,15 @@ class Settings(BaseSettings):
     datto_api_base_url: str = "https://zinfandel-api.centrastage.net"
     datto_api_key: str
     datto_api_secret: str
-    datto_component_uid: str
+
+    profiles_config_path: str = "/config/profiles.yaml"
+
+    # Legacy single-profile fallback when profiles file is missing
+    webhook_secret: str = ""
+    datto_component_uid: str = ""
     datto_job_name: str = "Webhook remediation"
     datto_job_variables_json: str = "[]"
 
-    webhook_secret: str
     quickjob_interval_minutes: int = 15
     run_on_detect: bool = True
     data_dir: str = "/data"

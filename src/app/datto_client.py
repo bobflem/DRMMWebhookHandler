@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings
+from app.profiles import WebhookProfile
 
 logger = logging.getLogger(__name__)
 
@@ -120,14 +121,20 @@ class DattoClient:
 
         return response.json()
 
-    async def create_quick_job(self, device_uid: str, *, retry_auth: bool = True) -> dict[str, Any]:
+    async def create_quick_job(
+        self,
+        device_uid: str,
+        profile: WebhookProfile,
+        *,
+        retry_auth: bool = True,
+    ) -> dict[str, Any]:
         token = await self.ensure_token()
         url = f"{self._api_root}/v2/device/{device_uid}/quickjob"
         body = {
-            "jobName": self._settings.datto_job_name,
+            "jobName": profile.job_name,
             "jobComponent": {
-                "componentUid": self._settings.datto_component_uid,
-                "variables": self._settings.job_variables,
+                "componentUid": profile.component_uid,
+                "variables": profile.variables,
             },
         }
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -139,7 +146,7 @@ class DattoClient:
 
         if response.status_code == 401 and retry_auth:
             await self._refresh_token()
-            return await self.create_quick_job(device_uid, retry_auth=False)
+            return await self.create_quick_job(device_uid, profile, retry_auth=False)
 
         if response.status_code == 429:
             raise DattoApiError("Rate limited (429)", 429)

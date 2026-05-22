@@ -7,4 +7,5 @@ services:
       - .env
     volumes:
       - ./data:/data
+      - ./config/profiles.yaml:/config/profiles.yaml:ro
     restart: unless-stopped

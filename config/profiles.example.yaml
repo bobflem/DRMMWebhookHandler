@@ -1,0 +1,12 @@
+profiles:
+  - id: unwanted-software-a
+    secret: "your-secret-for-monitor-a"
+    component_uid: "component-uid-from-datto"
+    job_name: "Remediate software A"
+    variables: []
+
+  - id: unwanted-software-b
+    secret: "your-secret-for-monitor-b"
+    component_uid: "other-component-uid"
+    job_name: "Remediate software B"
+    variables: []

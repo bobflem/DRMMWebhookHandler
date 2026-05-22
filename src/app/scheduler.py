@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI
 
 from app.datto_client import DattoApiError, DattoClient, is_job_still_active_on_device
-from app.store import ActiveDevice, DeviceStore
+from app.profiles import ProfileRegistry, WebhookProfile
+from app.store import DeviceStore, ScheduledDevice
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +26,20 @@ def _is_due(last_run_at: str | None, interval_minutes: int) -> bool:
     return datetime.now(timezone.utc) >= last_run + timedelta(minutes=interval_minutes)
 
 
+def _resolve_primary_profile(registry: ProfileRegistry, device: ScheduledDevice) -> WebhookProfile | None:
+    profile = registry.get_by_id(device.primary_profile_id)
+    if profile is None:
+        logger.error(
+            "Unknown primary_profile_id %s for device %s",
+            device.primary_profile_id,
+            device.device_uid,
+        )
+    return profile
+
+
 async def _should_skip_due_to_active_job(
     datto: DattoClient,
-    device: ActiveDevice,
+    device: ScheduledDevice,
 ) -> bool:
     if not device.last_job_uid:
         return False
@@ -61,17 +73,21 @@ async def _should_skip_due_to_active_job(
     return False
 
 
-async def run_quickjob_for_device(app: FastAPI, device: ActiveDevice) -> bool:
+async def run_quickjob_for_device(app: FastAPI, device: ScheduledDevice) -> bool:
     datto: DattoClient = app.state.datto
     store: DeviceStore = app.state.store
+    registry: ProfileRegistry = app.state.profiles
+
+    profile = _resolve_primary_profile(registry, device)
+    if profile is None:
+        return False
 
     try:
         if await _should_skip_due_to_active_job(datto, device):
-            # Advance interval so status is only re-checked on the next scheduled run, not every tick.
             store.set_last_run(device.device_uid)
             return False
 
-        result = await datto.create_quick_job(device.device_uid)
+        result = await datto.create_quick_job(device.device_uid, profile)
         job_uid = None
         if isinstance(result, dict):
             job = result.get("job") or {}
@@ -80,7 +96,12 @@ async def run_quickjob_for_device(app: FastAPI, device: ActiveDevice) -> bool:
         if job_uid:
             store.set_last_job(device.device_uid, job_uid)
         store.set_last_run(device.device_uid)
-        logger.info("Quick job created for %s (job_uid=%s)", device.device_uid, job_uid)
+        logger.info(
+            "Quick job created for %s profile=%s (job_uid=%s)",
+            device.device_uid,
+            profile.id,
+            job_uid,
+        )
         return True
     except DattoApiError as exc:
         if exc.status_code == 429:
@@ -94,7 +115,7 @@ async def run_quickjob_for_device_uid(app: FastAPI, device_uid: str) -> bool:
     store: DeviceStore = app.state.store
     device = store.get(device_uid)
     if device is None:
-        logger.warning("Device %s not in active store; skipping quick job", device_uid)
+        logger.warning("Device %s not scheduled; skipping quick job", device_uid)
         return False
     return await run_quickjob_for_device(app, device)
 
@@ -108,7 +129,7 @@ async def _scheduler_loop(app: FastAPI) -> None:
 
     while True:
         try:
-            devices = store.list_all()
+            devices = store.list_scheduled()
             for device in devices:
                 if not _is_due(device.last_run_at, interval):
                     continue

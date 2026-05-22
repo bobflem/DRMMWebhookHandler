@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 
 from app.config import Settings, get_settings
 from app.datto_client import DattoApiError, DattoClient
+from app.profiles import load_profile_registry
 from app.scheduler import start_scheduler, stop_scheduler
 from app.store import DeviceStore
 from app.webhook import router as webhook_router
@@ -19,16 +20,23 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    profiles = load_profile_registry(settings)
     store = DeviceStore(settings.db_path)
     store.migrate()
     datto = DattoClient(settings)
 
     app.state.settings = settings
+    app.state.profiles = profiles
     app.state.store = store
     app.state.datto = datto
 
     active = store.count()
-    logger.info("Loaded %s active device(s) from %s", active, settings.db_path)
+    logger.info(
+        "Started with %s profile(s), %s scheduled device(s), db=%s",
+        len(profiles.profiles),
+        active,
+        settings.db_path,
+    )
 
     start_scheduler(app)
     yield

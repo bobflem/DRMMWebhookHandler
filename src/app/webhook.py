@@ -3,24 +3,14 @@ from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 
-from app.config import Settings
 from app.datto_client import DattoApiError, DattoClient
+from app.profiles import ProfileRegistry
 from app.scheduler import run_quickjob_for_device_uid
 from app.store import DeviceStore
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def _validate_secret(
-    settings: Settings,
-    secret_query: str | None,
-    secret_header: str | None,
-) -> None:
-    provided = secret_query or secret_header
-    if not provided or provided != settings.webhook_secret:
-        raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
 
 async def _resolve_device_uid(payload: dict[str, Any], datto: DattoClient) -> str:
@@ -49,11 +39,15 @@ async def datto_webhook(
     secret: str | None = Query(default=None),
     x_webhook_secret: str | None = Header(default=None, alias="X-Webhook-Secret"),
 ) -> dict[str, str]:
-    settings: Settings = request.app.state.settings
+    settings = request.app.state.settings
     store: DeviceStore = request.app.state.store
     datto: DattoClient = request.app.state.datto
+    registry: ProfileRegistry = request.app.state.profiles
 
-    _validate_secret(settings, secret, x_webhook_secret)
+    provided = secret or x_webhook_secret
+    profile = registry.resolve_secret(provided)
+    if profile is None:
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
     try:
         payload = await request.json()
@@ -71,12 +65,28 @@ async def datto_webhook(
     hostname = payload.get("hostname") or payload.get("device_hostname")
 
     if event == "detected":
-        store.upsert_detected(device_uid, hostname)
-        logger.info("Software detected on %s (%s)", device_uid, hostname or "unknown")
+        store.record_detect(device_uid, profile.id, hostname)
+        logger.info(
+            "Software detected on %s (%s) profile=%s",
+            device_uid,
+            hostname or "unknown",
+            profile.id,
+        )
         if settings.run_on_detect:
             await run_quickjob_for_device_uid(request.app, device_uid)
-        return {"status": "ok", "action": "tracking"}
+        return {"status": "ok", "action": "tracking", "profile": profile.id}
 
-    removed = store.remove(device_uid)
-    logger.info("Software cleared on %s (removed=%s)", device_uid, removed)
-    return {"status": "ok", "action": "stopped"}
+    stopped = store.record_clear(device_uid, profile.id)
+    remaining = store.detection_count(device_uid) if not stopped else 0
+    logger.info(
+        "Software cleared on %s profile=%s (stopped=%s, remaining_profiles=%s)",
+        device_uid,
+        profile.id,
+        stopped,
+        remaining,
+    )
+    return {
+        "status": "ok",
+        "action": "stopped" if stopped else "still_tracking",
+        "profile": profile.id,
+    }
