@@ -16,6 +16,8 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.deploy_tag.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,6 +43,15 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Set Northflank deploy image tag
+        id: deploy_tag
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -48,3 +59,17 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  deploy-northflank:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Northflank
+        uses: northflank/deploy-to-northflank@v1
+        with:
+          northflank-api-key: ${{ secrets.NORTHFLANK_API_KEY }}
+          project-id: ${{ secrets.NORTHFLANK_PROJECT_ID }}
+          service-id: ${{ secrets.NORTHFLANK_SERVICE_ID }}
+          image-path: ghcr.io/${{ github.repository }}:${{ needs.build-and-push.outputs.image_tag }}
+          credentials-id: ${{ secrets.NORTHFLANK_CREDENTIALS_ID }}

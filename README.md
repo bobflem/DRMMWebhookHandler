@@ -129,9 +129,15 @@ SQLite at `DATA_DIR/active_devices.db` with `device_detections` and `device_sche
 
 ---
 
+## Deploy on Northflank
+
+See **[docs/northflank.md](docs/northflank.md)** for UI setup, volumes, profiles secret file, and GitHub Actions deploy using `NORTHFLANK_API_KEY` (store in GitHub Secrets only—never commit).
+
+---
+
 ## Docker image (GHCR)
 
-Published on push to `main`, `dev`, or version tags `v*`.
+Published on push to `main`, `dev`, or version tags `v*`. Can auto-deploy to Northflank when GitHub secrets are configured (see docs).
 
 | Branch / tag | Image tags |
 |--------------|------------|
